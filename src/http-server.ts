@@ -1,51 +1,63 @@
 /**
  * HTTP entry point for Render deployment.
- * Uses the official MCP Express adapter to create the app and transport.
+ * Reuses the McpServer instance exported from ./server.ts (all tools already registered),
+ * only replaces StdioServerTransport with NodeStreamableHTTPServerTransport.
  */
-import { createMcpExpressApp } from "@modelcontextprotocol/express";
+import express from "express";
 import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
-import { McpServer } from "@modelcontextprotocol/server";
-import { server as existingServer } from "./server.ts"; // Reuse existing tool registration logic
+import { server } from "./server.ts"; // same singleton instance
 
-const app = createMcpExpressApp();
+const app = express();
+app.use(express.json());
+
 const PORT = Number(process.env.PORT ?? 10000);
-const MCP_API_TOKEN = process.env.MCP_API_TOKEN;
+const MCP_API_TOKEN = process.env.MCP_API_TOKEN; // optional, but strongly recommended
+const RENDER_HOST = process.env.RENDER_EXTERNAL_HOSTNAME || "jumia-vendor-mcp.onrender.com";
 
-// Health check
+// ---- Health check (for Render + UptimeRobot) ----
 app.get("/health", (_req, res) => {
   res.status(200).send("ok");
 });
 
-// Optional Bearer authentication
+// ---- Optional: simple Bearer authentication ----
+// If MCP_API_TOKEN is set, requests without the correct token are rejected.
 app.use("/mcp", (req, res, next) => {
-  if (!MCP_API_TOKEN) return next();
+  if (!MCP_API_TOKEN) return next(); // no token configured, allow all requests
   const auth = req.headers.authorization ?? "";
   if (auth === `Bearer ${MCP_API_TOKEN}`) return next();
   res.status(401).json({ error: "Unauthorized" });
 });
 
-// MCP Streamable HTTP endpoint (stateless mode)
+// Helper function to get a configured transport
+function getTransport() {
+  return new NodeStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined, // Stateless mode
+    enableDnsRebindingProtection: true,
+    allowedHosts: [RENDER_HOST, "localhost", "127.0.0.1"], // <--- CRITICAL FIX
+  });
+}
+
+// ---- MCP Streamable HTTP endpoint ----
 app.post("/mcp", async (req, res) => {
-  // Key fix: create a new server instance for each request, or reuse a factory pattern
-  // If existingServer is a singleton, you need to ensure it can connect multiple times (not recommended).
-  // More robust approach: move tool registration logic into a factory function and call it for each request.
-  const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  await existingServer.connect(transport);
+  const transport = getTransport();
+  await server.connect(transport);
   await transport.handleRequest(req, res, req.body);
 });
 
 app.get("/mcp", async (req, res) => {
-  const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  await existingServer.connect(transport);
+  const transport = getTransport();
+  await server.connect(transport);
   await transport.handleRequest(req, res);
 });
 
 app.delete("/mcp", async (req, res) => {
-  const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  await existingServer.connect(transport);
+  const transport = getTransport();
+  await server.connect(transport);
   await transport.handleRequest(req, res);
 });
 
+// ---- Start ----
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Jumia MCP HTTP server listening on 0.0.0.0:${PORT}`);
+  console.log(`Allowed Hosts for DNS Rebinding: ${RENDER_HOST}`);
 });
