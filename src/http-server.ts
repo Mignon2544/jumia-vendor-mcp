@@ -1,84 +1,80 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wizo Seller Hub</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .btn { background-color: #ff9900; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .btn:hover { background-color: #e68a00; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .card h3 { margin-top: 0; color: #333; }
-        .status { font-size: 12px; padding: 4px 8px; border-radius: 12px; background: #e6f4ea; color: #1e8e3e; font-weight: bold; }
-    </style>
-</head>
-<body>
+import express from "express";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
+import { server } from "./server.ts"; 
 
-    <div class="header">
-        <h1>🛒 Wizo Seller Hub</h1>
-        <button class="btn" onclick="loadShops()">Refresh Shops</button>
-    </div>
+import { loadSettings } from "./config.ts";
+import { TokenManager } from "./auth.ts";
+import { VendorApiHttp } from "./http.ts";
+import { VendorApiClient } from "./client.ts";
 
-    <div id="status-message"></div>
-    <div class="grid" id="shops-container">
-        <!-- Shops will load here -->
-    </div>
+const app = express();
+app.use(express.json());
 
-    <script>
-        // We will store your API token here temporarily for the browser to use
-        const API_TOKEN = prompt("Please enter your MCP_API_TOKEN (the password you set in Render):");
+const PORT = Number(process.env.PORT ?? 10000);
+const MCP_API_TOKEN = process.env.MCP_API_TOKEN; 
+const RENDER_HOST = process.env.RENDER_EXTERNAL_HOSTNAME || "jumia-vendor-mcp.onrender.com";
 
-        async function loadShops() {
-            const container = document.getElementById('shops-container');
-            const statusMsg = document.getElementById('status-message');
-            
-            container.innerHTML = '<p>Loading shops from Jumia...</p>';
-            statusMsg.innerHTML = '';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use(express.static(path.join(__dirname, "..", "public")));
 
-            try {
-                // Call our new API endpoint
-                const response = await fetch('/api/shops', {
-                    headers: {
-                        'Authorization': `Bearer ${API_TOKEN}`
-                    }
-                });
+app.use((req, res, next) => {
+  if (req.path === "/health" || req.path === "/" || req.path.startsWith("/index.html")) return next();
+  
+  if (!MCP_API_TOKEN) return next();
+  const auth = req.headers.authorization ?? "";
+  if (auth === `Bearer ${MCP_API_TOKEN}`) return next();
+  
+  res.status(401).json({ error: "Unauthorized" });
+});
 
-                if (!response.ok) throw new Error("Failed to fetch. Check your token.");
-                
-                const data = await response.json();
-                container.innerHTML = ''; // Clear loading text
+app.get("/api/shops", async (req, res) => {
+    try {
+        const settings = await loadSettings();
+        const tokenManager = new TokenManager(settings);
+        const http = new VendorApiHttp(settings.apiBaseUrl, tokenManager);
+        const client = new VendorApiClient(http);
+        
+        const shops = await client.getShops();
+        res.json(shops);
+    } catch (error: any) {
+        console.error("Jumia API Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
-                if (data.length === 0) {
-                    container.innerHTML = '<p>No shops found on this account.</p>';
-                    return;
-                }
+app.get("/health", (_req, res) => {
+  res.status(200).send("ok");
+});
 
-                // Create a card for each shop
-                data.forEach(shop => {
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    card.innerHTML = `
-                        <h3>${shop.name || shop.shopName || 'Unnamed Shop'}</h3>
-                        <p><strong>Shop ID:</strong> ${shop.id || shop.shopId}</p>
-                        <p><strong>Country:</strong> ${shop.country || 'N/A'}</p>
-                        <span class="status">Active</span>
-                    `;
-                    container.appendChild(card);
-                });
+function getTransport() {
+  return new NodeStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined, 
+    enableDnsRebindingProtection: true,
+    allowedHosts: [RENDER_HOST, "localhost", "127.0.0.1"], 
+  });
+}
 
-            } catch (error) {
-                container.innerHTML = '';
-                statusMsg.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
-            }
-        }
+app.post("/mcp", async (req, res) => {
+  const transport = getTransport();
+  await server.connect(transport);
+  await transport.handleRequest(req, res, req.body);
+});
 
-        // Load shops automatically when page opens (if token is provided)
-        if (API_TOKEN) {
-            loadShops();
-        }
-    </script>
-</body>
-</html>
+app.get("/mcp", async (req, res) => {
+  const transport = getTransport();
+  await server.connect(transport);
+  await transport.handleRequest(req, res);
+});
+
+app.delete("/mcp", async (req, res) => {
+  const transport = getTransport();
+  await server.connect(transport);
+  await transport.handleRequest(req, res);
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Jumia MCP HTTP server listening on 0.0.0.0:${PORT}`);
+});
