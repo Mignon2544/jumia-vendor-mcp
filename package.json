@@ -6,12 +6,13 @@
   "engines": {
     "node": ">=24"
   },
-  "scripts": {
-    "start": "node src/server.ts",
-    "setup": "node src/setup.ts",
-    "test": "node --test \"tests/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
-  },
+"scripts": {
+  "start": "node src/http-server.ts",
+  "start:stdio": "node src/server.ts",
+  "setup": "node src/setup.ts",
+  "test": "node --test \"tests/**/*.test.ts\"",
+  "typecheck": "tsc --noEmit"
+},
   "dependencies": {
     "@modelcontextprotocol/express": "^2.0.2",
     "@modelcontextprotocol/node": "^2.1.2",
