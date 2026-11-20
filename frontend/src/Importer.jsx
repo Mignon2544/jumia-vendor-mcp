@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { UploadCloud, FileArchive, CheckCircle, Loader2 } from 'lucide-react';
+import { UploadCloud, FileArchive, CheckCircle, Loader2, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Importer({ token }) {
@@ -24,20 +24,49 @@ export default function Importer({ token }) {
     formData.append('zipFile', file);
 
     try {
-      // Pointing to your live Render server
       const response = await fetch('https://jumia-vendor-mcp.onrender.com/api/import/zip', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
       
-      if (!response.ok) throw new Error('Failed to process ZIP file.');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to process ZIP file.');
+      }
+      
       const data = await response.json();
       setResults(data);
     } catch (err) {
       setError(err.message);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const downloadExcel = async () => {
+    try {
+      const response = await fetch('https://jumia-vendor-mcp.onrender.com/api/export/excel', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ products: results.extractedProducts })
+      });
+      
+      if (!response.ok) throw new Error("Failed to generate Excel");
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Jumia_Import.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      setError("Failed to download Excel file.");
     }
   };
 
@@ -92,12 +121,22 @@ export default function Importer({ token }) {
         </div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          <div className="bg-green-500/10 border border-green-500/20 p-6 rounded-2xl flex items-center gap-4">
-            <CheckCircle className="text-green-400" size={32} />
-            <div>
-              <h3 className="text-lg font-bold text-white">Import Successful!</h3>
-              <p className="text-green-400">Found {results.extractedProducts.length} potential products and {results.totalImagesFound} images.</p>
+          
+          <div className="bg-green-500/10 border border-green-500/20 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex items-center gap-4">
+              <CheckCircle className="text-green-400" size={32} />
+              <div>
+                <h3 className="text-lg font-bold text-white">Import Successful!</h3>
+                <p className="text-green-400">Found {results.extractedProducts.length} potential products and {results.totalImagesFound} images.</p>
+              </div>
             </div>
+            
+            <button 
+              onClick={downloadExcel} 
+              className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg"
+            >
+              <Download size={20} /> Export to Excel
+            </button>
           </div>
 
           <div className="bg-panelBg border border-white/10 rounded-2xl overflow-hidden backdrop-blur-lg">
@@ -114,13 +153,15 @@ export default function Importer({ token }) {
                   <tr key={i} className="border-b border-white/5">
                     <td className="px-6 py-4">
                       {prod.image ? (
-                        <img src={prod.image} className="w-16 h-16 rounded-lg object-cover" alt="extracted" />
+                        <img src={prod.image} className="w-16 h-16 rounded-lg object-cover border border-white/10" alt="extracted" />
                       ) : (
-                        <div className="w-16 h-16 bg-white/5 rounded-lg flex items-center justify-center text-xs text-gray-500">No Img</div>
+                        <div className="w-16 h-16 bg-white/5 rounded-lg flex items-center justify-center text-xs text-gray-500 border border-white/10">No Img</div>
                       )}
                     </td>
                     <td className="px-6 py-4 max-w-md">{prod.rawText}</td>
-                    <td className="px-6 py-4 font-mono text-brand">{prod.price ? `${prod.price} KES` : 'Not found'}</td>
+                    <td className="px-6 py-4 font-mono text-brand font-bold">
+                      {prod.price ? `KES ${prod.price}` : 'Not found'}
+                    </td>
                   </tr>
                 ))}
               </tbody>

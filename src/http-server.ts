@@ -1,3 +1,4 @@
+import ExcelJS from "exceljs";
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -176,7 +177,8 @@ app.post("/api/import/zip", upload.single("zipFile"), async (req, res) => {
         lines.forEach((line) => {
             if (!line.trim()) return;
 
-            const priceMatch = line.match(/(?:ksh|kes|price)?\s*(\d{2,6})/i);
+            const lineWithoutTimestamp = line.replace(/\[.*?\]/, "");
+            const priceMatch = lineWithoutTimestamp.match(/(?:ksh|kes|price)?\s*(\d{2,6})/i);
             const cleanLine = line.replace(/\[.*?\]\s*[^:]+:\s*/, "").trim();
 
             if (cleanLine.length > 5) { 
@@ -196,6 +198,52 @@ app.post("/api/import/zip", upload.single("zipFile"), async (req, res) => {
 
     } catch (error: any) {
         console.error("Import Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+// --- EXCEL EXPORTER ENDPOINT ---
+app.post("/api/export/excel", async (req, res) => {
+    try {
+        const { products } = req.body;
+
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Jumia Products');
+
+        // Jumia Template Headers
+        worksheet.columns = [
+            { header: 'SellerSku', key: 'sku', width: 20 },
+            { header: 'Name', key: 'name', width: 40 },
+            { header: 'Description', key: 'desc', width: 50 },
+            { header: 'Price', key: 'price', width: 15 },
+            { header: 'Stock', key: 'stock', width: 10 },
+            { header: 'Brand', key: 'brand', width: 20 },
+            { header: 'Category', key: 'category', width: 20 },
+        ];
+
+        products.forEach((p: any) => {
+            worksheet.addRow({
+                sku: p.sku || `SKU-${Math.floor(Math.random() * 10000)}`,
+                name: p.name || p.rawText,
+                desc: p.description || p.rawText,
+                price: Number(p.price) || 0,
+                stock: Number(p.stock) || 10,
+                brand: p.brand || 'Generic',
+                category: p.category || 'Accessories'
+            });
+        });
+
+        // Style the header row
+        worksheet.getRow(1).font = { bold: true };
+
+        // Send file to browser
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename="Jumia_Upload_Template.xlsx"');
+
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error: any) {
+        console.error("Export Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
