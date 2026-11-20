@@ -226,6 +226,48 @@ app.post("/api/export/excel", async (req, res) => {
     } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
+// --- PUBLISH TO JUMIA ---
+app.post("/api/import/publish", async (req, res) => {
+    try {
+        const { products, shopId } = req.body;
+
+        if (!shopId) {
+            return res.status(400).json({ error: "Shop ID is required to publish." });
+        }
+
+        const settings = await loadSettings();
+        const tokenManager = new TokenManager(settings);
+        const http = new VendorApiHttp(settings.apiBaseUrl, tokenManager);
+        const client = new VendorApiClient(http);
+
+        // Map the imported data to Jumia's required schema
+        const jumiaProducts = products.map((p: any) => {
+            const sku = p.sku || `SKU-${Math.floor(Math.random() * 10000)}`;
+            
+            return {
+                name: { value: p.name || p.rawText },
+                description: { value: p.description || p.rawText },
+                sellerSku: sku,
+                parentSku: sku, // Required for standalone products
+                brand: { code: "1234", name: p.brand || "Generic" }, // Note: Jumia requires actual brand codes
+                category: { code: p.categoryCode || "1234", name: p.categoryName || "Uncategorized" },
+                price: { currency: "KES", value: Number(p.price) || 0 },
+                stock: Number(p.stock) || 10,
+                images: p.image ? [{ url: p.image, primary: true }] : [], // ⚠️ MUST BE A PUBLIC URL
+                attributes: []
+            };
+        });
+
+        // Send to Jumia API
+        const result = await client.createProducts(shopId, jumiaProducts);
+        
+        res.json({ success: true, result });
+
+    } catch (error: any) {
+        console.error("Publish Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
 // --- HEALTH & MCP ---
 app.get("/health", (_req, res) => res.status(200).send("ok"));
 
