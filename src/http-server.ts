@@ -23,9 +23,7 @@ app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "Authorization, Content-Type");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
 
@@ -39,11 +37,9 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.use((req, res, next) => {
   if (req.path === "/health" || req.path === "/" || req.path.startsWith("/index.html") || req.path.startsWith("/api/import")) return next();
-  
   if (!MCP_API_TOKEN) return next();
   const auth = req.headers.authorization ?? "";
   if (auth === `Bearer ${MCP_API_TOKEN}`) return next();
-  
   res.status(401).json({ error: "Unauthorized" });
 });
 
@@ -51,136 +47,63 @@ app.use((req, res, next) => {
 app.get("/api/shops", async (req, res) => {
     try {
         const settings = await loadSettings();
-        const tokenManager = new TokenManager(settings);
-        const http = new VendorApiHttp(settings.apiBaseUrl, tokenManager);
-        const client = new VendorApiClient(http);
-        
-        const shops = await client.getShops();
-        res.json(shops);
-    } catch (error: any) {
-        console.error("Jumia API Error:", error);
-        res.status(500).json({ error: error.message });
-    }
+        const client = new VendorApiClient(new VendorApiHttp(settings.apiBaseUrl, new TokenManager(settings)));
+        res.json(await client.getShops());
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
 app.get("/api/products", async (req, res) => {
     try {
         const settings = await loadSettings();
-        const tokenManager = new TokenManager(settings);
-        const http = new VendorApiHttp(settings.apiBaseUrl, tokenManager);
-        const client = new VendorApiClient(http);
-        
-        const pageToken = req.query.token as string | undefined;
-        const searchQuery = req.query.search as string | undefined;
-        const searchType = req.query.type as string | undefined;
-
-        const options: any = { size: 50, token: pageToken };
-
-        if (searchQuery && searchType === "sku") {
-            options.sellerSku = searchQuery;
-        }
-
-        const products = await client.getProducts(options);
-        res.json(products);
-    } catch (error: any) {
-        console.error("Jumia API Error:", error);
-        res.status(500).json({ error: error.message });
-    }
+        const client = new VendorApiClient(new VendorApiHttp(settings.apiBaseUrl, new TokenManager(settings)));
+        const options: any = { size: 50, token: req.query.token as string };
+        if (req.query.search && req.query.type === "sku") options.sellerSku = req.query.search;
+        res.json(await client.getProducts(options));
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
 app.post("/api/products/update-price", async (req, res) => {
     try {
         const { sellerSku, id, category, newPrice, currency } = req.body;
         const settings = await loadSettings();
-        const tokenManager = new TokenManager(settings);
-        const http = new VendorApiHttp(settings.apiBaseUrl, tokenManager);
-        const client = new VendorApiClient(http);
-
-        const payload = [{
-            sellerSku: sellerSku,
-            id: id,
-            category: category,
-            price: { currency: currency || "KES", value: Number(newPrice) }
-        }];
-
-        const result = await client.updatePrice(payload);
-        res.json({ success: true, result });
-    } catch (error: any) {
-        res.status(500).json({ error: error.message });
-    }
+        const client = new VendorApiClient(new VendorApiHttp(settings.apiBaseUrl, new TokenManager(settings)));
+        const payload = [{ sellerSku, id, category, price: { currency: currency || "KES", value: Number(newPrice) } }];
+        res.json({ success: true, result: await client.updatePrice(payload) });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
 app.post("/api/products/update-status", async (req, res) => {
     try {
         const { sellerSku, id, businessClientCode, newStatus } = req.body;
         const settings = await loadSettings();
-        const tokenManager = new TokenManager(settings);
-        const http = new VendorApiHttp(settings.apiBaseUrl, tokenManager);
-        const client = new VendorApiClient(http);
-
-        const payload = [{
-            id: id,
-            sellerSku: sellerSku,
-            businessClients: [{ businessClientCode: businessClientCode, status: newStatus }]
-        }];
-
-        const result = await client.updateStatus(payload);
-        res.json({ success: true, result });
-    } catch (error: any) {
-        res.status(500).json({ error: error.message });
-    }
+        const client = new VendorApiClient(new VendorApiHttp(settings.apiBaseUrl, new TokenManager(settings)));
+        const payload = [{ id, sellerSku, businessClients: [{ businessClientCode, status: newStatus }] }];
+        res.json({ success: true, result: await client.updateStatus(payload) });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
-app.post("/api/products/update-stock", async (req, res) => {
-    try {
-        const { sellerSku, id, newStock } = req.body;
-        const settings = await loadSettings();
-        const tokenManager = new TokenManager(settings);
-        const http = new VendorApiHttp(settings.apiBaseUrl, tokenManager);
-        const client = new VendorApiClient(http);
-
-        const payload = [{ sellerSku: sellerSku, id: id, stock: Number(newStock) }];
-
-        const result = await client.updateStock(payload);
-        res.json({ success: true, result });
-    } catch (error: any) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// --- ZIP IMPORTER ENDPOINT ---
+// --- ZIP IMPORTER ---
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.post("/api/import/zip", upload.single("zipFile"), async (req, res) => {
     try {
-        if (!req.file) {
-            return res.status(400).json({ error: "No ZIP file uploaded." });
-        }
+        if (!req.file) return res.status(400).json({ error: "No ZIP file uploaded." });
 
         const zip = new AdmZip(req.file.buffer);
-        const zipEntries = zip.getEntries();
-        
         let chatText = "";
         const images: string[] = []; 
 
-        zipEntries.forEach((entry) => {
-            if (entry.entryName.endsWith(".txt")) {
-                chatText = entry.getData().toString("utf8");
-            } else if (entry.entryName.match(/\.(jpg|jpeg|png)$/i)) {
-                const imgBuffer = entry.getData();
-                const base64 = imgBuffer.toString("base64");
+        zip.getEntries().forEach((entry) => {
+            if (entry.entryName.endsWith(".txt")) chatText = entry.getData().toString("utf8");
+            else if (entry.entryName.match(/\.(jpg|jpeg|png)$/i)) {
                 const ext = entry.entryName.split('.').pop();
-                images.push(`data:image/${ext};base64,${base64}`);
+                images.push(`data:image/${ext};base64,${entry.getData().toString("base64")}`);
             }
         });
 
-        const lines = chatText.split('\n');
         const parsedProducts: any[] = [];
-
-        lines.forEach((line) => {
+        chatText.split('\n').forEach((line) => {
             if (!line.trim()) return;
-
-            // Remove timestamp before looking for price
             const lineWithoutTimestamp = line.replace(/\[.*?\]/, "");
             const priceMatch = lineWithoutTimestamp.match(/(?:ksh|kes|price)?\s*(\d{2,6})/i);
             const cleanLine = line.replace(/\[.*?\]\s*[^:]+:\s*/, "").trim();
@@ -194,164 +117,124 @@ app.post("/api/import/zip", upload.single("zipFile"), async (req, res) => {
             }
         });
 
-        res.json({ 
-            success: true, 
-            extractedProducts: parsedProducts,
-            totalImagesFound: images.length
-        });
-
-    } catch (error: any) {
-        console.error("Import Error:", error);
-        res.status(500).json({ error: error.message });
-    }
+        res.json({ success: true, extractedProducts: parsedProducts, totalImagesFound: images.length });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
-// --- AI CATEGORIZATION ENDPOINT ---
+// --- AI CATEGORIZATION ---
 app.post("/api/import/ai-categorize", async (req, res) => {
     try {
         const { products } = req.body;
         const geminiKey = process.env.GEMINI_API_KEY;
-        
-        if (!geminiKey) {
-            return res.status(400).json({ error: "GEMINI_API_KEY is not set on the server." });
-        }
+        if (!geminiKey) return res.status(400).json({ error: "GEMINI_API_KEY not set." });
 
         const genAI = new GoogleGenerativeAI(geminiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-3.8-flash" });
-        // 1. Fetch live categories from Jumia
-        const settings = await loadSettings();
-        const tokenManager = new TokenManager(settings);
-        const http = new VendorApiHttp(settings.apiBaseUrl, tokenManager);
-        const client = new VendorApiClient(http);
-        
-        const categoryData = await client.getCategories({ size: 100 });
-        const categoryListString = categoryData.categories
-            ?.map((c: any) => `[${c.code}] ${c.name}`)
-            .join("\n");
 
-        // 2. Ask AI to match the products
+        const settings = await loadSettings();
+        const client = new VendorApiClient(new VendorApiHttp(settings.apiBaseUrl, new TokenManager(settings)));
+        
+        // Fetch deep categories
+        const categoryData = await client.getCategories({ size: 500 });
+        const categoryListString = categoryData.categories?.map((c: any) => `[${c.code}] ${c.completePath || c.name}`).join("\n");
+
         const prompt = `
-        You are an expert Jumia e-commerce manager.
-        Here is a list of valid Jumia Category Codes and Names:
+        You are a Jumia catalog expert.
+        Here are valid Jumia Categories:
         ${categoryListString}
 
-        Here are the raw WhatsApp products:
+        Products to categorize:
         ${products.map((p: any, i: number) => `Product ${i}: ${p.rawText}`).join("\n")}
 
-        For each product, determine the best Jumia Category Code. 
-        Return ONLY a JSON array of objects with the format: 
-        [{"index": 0, "category_code": "12345", "category_name": "Phones & Tablets"}]
-        Do not wrap the response in markdown block quotes.
+        Return ONLY a JSON array: [{"index": 0, "category_code": "123", "category_name": "Full > Path"}]
         `;
 
         const result = await model.generateContent(prompt);
-        let responseText = result.response.text();
+        let text = result.response.text();
+        const start = text.indexOf('[');
+        const end = text.lastIndexOf(']');
+        if (start === -1 || end === -1) throw new Error("AI returned invalid format.");
         
-        // 3. Robust JSON Cleaning
-        const startIndex = responseText.indexOf('[');
-        const endIndex = responseText.lastIndexOf(']');
-        
-        if (startIndex === -1 || endIndex === -1) {
-            console.error("AI Response did not contain a JSON array:", responseText);
-            throw new Error("AI failed to return a valid category list.");
-        }
+        const aiMatches = JSON.parse(text.substring(start, end + 1));
 
-        const cleanJson = responseText.substring(startIndex, endIndex + 1);
-        const aiMatches = JSON.parse(cleanJson);
-
-        // 4. Merge results
-        const enrichedProducts = products.map((p: any, i: number) => {
-            const match = aiMatches.find((m: any) => m.index === i);
-            return {
-                ...p,
-                categoryCode: match?.category_code || "",
-                categoryName: match?.category_name || "Uncategorized"
-            };
+        res.json({ 
+            success: true, 
+            enrichedProducts: products.map((p: any, i: number) => {
+                const match = aiMatches.find((m: any) => m.index === i);
+                return { ...p, categoryCode: match?.category_code || "", categoryName: match?.category_name || "Uncategorized" };
+            })
         });
-
-        res.json({ success: true, enrichedProducts });
-
-    } catch (error: any) {
-        console.error("AI Categorization Error:", error);
-        res.status(500).json({ error: error.message });
-    }
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
-// --- EXCEL EXPORTER ENDPOINT ---
+// --- EXCEL EXPORTER (73 HEADERS) ---
 app.post("/api/export/excel", async (req, res) => {
     try {
         const { products } = req.body;
-
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Jumia Products');
 
-        worksheet.columns = [
-            { header: 'SellerSku', key: 'sku', width: 20 },
-            { header: 'Name', key: 'name', width: 40 },
-            { header: 'Description', key: 'desc', width: 50 },
-            { header: 'Price', key: 'price', width: 15 },
-            { header: 'Stock', key: 'stock', width: 10 },
-            { header: 'Brand', key: 'brand', width: 20 },
-            { header: 'Category', key: 'category', width: 20 },
+        // Your exact 73 headers
+        const headers = [
+            'Name', 'Name_AR', 'Name_FR', 'Description', 'Description_AR', 'Description_FR', 
+            'SellerSKU', 'ParentSKU', 'Brand', 'PrimaryCategory', 'GTIN_Barcode', 'Price_KES', 
+            'Sale_Price_KES', 'Sale_Price_Start_At', 'Sale_Price_End_At', 'Stock', 'variation', 
+            'ac_design', 'air_cooler_type', 'blender_type', 'capacity', 'capacity_kg', 'capacity_kva', 
+            'capacity_liter', 'capacity_litres', 'capacity_slices', 'certifications', 'color', 
+            'color_AR', 'color_FR', 'color_family', 'cooker_type', 'defrost_type', 'fan_type', 
+            'freezer_type', 'fridge_type', 'horse_power', 'installation_type', 'juicer_type', 
+            'main_material', 'manufacturer_txt', 'material_family', 'model', 'note', 'package_content', 
+            'package_content_AR', 'package_content_FR', 'power', 'product_line', 'product_measures', 
+            'product_warranty', 'product_weight', 'production_country', 'short_description', 
+            'short_description_AR', 'short_description_FR', 'storage_features', 'stove_type', 
+            'venting_type', 'warranty_address', 'warranty_duration', 'warranty_type', 'washer_capacity', 
+            'washing_machine_type', 'wattage', 'youtube_id', 'MainImage', 'Image2', 'Image3', 
+            'Image4', 'Image5', 'Image6', 'Image7', 'Image8'
         ];
 
+        worksheet.addRow(headers);
+
         products.forEach((p: any) => {
-            worksheet.addRow({
-                sku: p.sku || `SKU-${Math.floor(Math.random() * 10000)}`,
-                name: p.name || p.rawText,
-                desc: p.description || p.rawText,
-                price: Number(p.price) || 0,
-                stock: Number(p.stock) || 10,
-                brand: p.brand || 'Generic',
-                category: p.categoryName || 'Uncategorized'
-            });
+            const sku = p.sku || `SKU-${Math.floor(Math.random() * 10000)}`;
+            const rowData: any = {};
+            headers.forEach(h => rowData[h] = ""); // Initialize all to empty
+
+            // Populate the ones we have data for
+            rowData['Name'] = p.name || p.rawText;
+            rowData['Description'] = p.description || p.rawText;
+            rowData['SellerSKU'] = sku;
+            rowData['ParentSKU'] = sku; 
+            rowData['Brand'] = p.brand || 'Generic';
+            rowData['PrimaryCategory'] = p.categoryName || 'Uncategorized';
+            rowData['Price_KES'] = Number(p.price) || 0;
+            rowData['Stock'] = Number(p.stock) || 10;
+            if (p.image) rowData['MainImage'] = p.image; // Note: Needs to be a URL for Jumia
+
+            worksheet.addRow(headers.map(h => rowData[h]));
         });
 
-        worksheet.getRow(1).font = { bold: true };
+        // Styling
+        const headerRow = worksheet.getRow(1);
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
+        headers.forEach((h, i) => worksheet.getColumn(i + 1).width = Math.max(h.length + 2, 15));
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', 'attachment; filename="Jumia_Upload_Template.xlsx"');
-
         await workbook.xlsx.write(res);
         res.end();
-
-    } catch (error: any) {
-        console.error("Export Error:", error);
-        res.status(500).json({ error: error.message });
-    }
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
-// --- HEALTH & MCP ROUTES ---
-app.get("/health", (_req, res) => {
-  res.status(200).send("ok");
-});
+// --- HEALTH & MCP ---
+app.get("/health", (_req, res) => res.status(200).send("ok"));
 
 function getTransport() {
-  return new NodeStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, 
-    enableDnsRebindingProtection: true,
-    allowedHosts: [RENDER_HOST, "localhost", "127.0.0.1"], 
-  });
+  return new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableDnsRebindingProtection: true, allowedHosts: [RENDER_HOST, "localhost", "127.0.0.1"] });
 }
 
-app.post("/mcp", async (req, res) => {
-  const transport = getTransport();
-  await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
-});
+app.post("/mcp", async (req, res) => { const t = getTransport(); await server.connect(t); await t.handleRequest(req, res, req.body); });
+app.get("/mcp", async (req, res) => { const t = getTransport(); await server.connect(t); await t.handleRequest(req, res); });
+app.delete("/mcp", async (req, res) => { const t = getTransport(); await server.connect(t); await t.handleRequest(req, res); });
 
-app.get("/mcp", async (req, res) => {
-  const transport = getTransport();
-  await server.connect(transport);
-  await transport.handleRequest(req, res);
-});
-
-app.delete("/mcp", async (req, res) => {
-  const transport = getTransport();
-  await server.connect(transport);
-  await transport.handleRequest(req, res);
-});
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Jumia MCP HTTP server listening on 0.0.0.0:${PORT}`);
-});
+app.listen(PORT, "0.0.0.0", () => console.log(`Server listening on 0.0.0.0:${PORT}`));
