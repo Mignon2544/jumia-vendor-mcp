@@ -1,3 +1,4 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import ExcelJS from "exceljs";
 import express from "express";
 import path from "node:path";
@@ -170,6 +171,72 @@ app.post("/api/import/zip", upload.single("zipFile"), async (req, res) => {
                 images.push(`data:image/${ext};base64,${base64}`);
             }
         });
+
+        app.post("/api/import/ai-categorize", async (req, res) => {
+    try {
+        const { products } = req.body;
+        const geminiKey = process.env.GEMINI_API_KEY;
+        
+        if (!geminiKey) {
+            return res.status(400).json({ error: "GEMINI_API_KEY is not set on the server." });
+        }
+
+        const genAI = new GoogleGenerativeAI(geminiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        // 1. Fetch live categories from Jumia
+        const settings = await loadSettings();
+        const tokenManager = new TokenManager(settings);
+        const http = new VendorApiHttp(settings.apiBaseUrl, tokenManager);
+        const client = new VendorApiClient(http);
+        
+        // Fetch first page of categories (you can expand this later)
+        const categoryData = await client.getCategories({ size: 100 });
+        
+        // Create a simplified list for the AI: [code] Name
+        const categoryListString = categoryData.categories
+            ?.map((c: any) => `[${c.code}] ${c.name}`)
+            .join("\n");
+
+        // 2. Ask AI to match the products
+        const prompt = `
+        You are an expert Jumia e-commerce manager.
+        Here is a list of valid Jumia Category Codes and Names:
+        ${categoryListString}
+
+        Here are the raw WhatsApp products:
+        ${products.map((p: any, i: number) => `Product ${i}: ${p.rawText}`).join("\n")}
+
+        For each product, determine the best Jumia Category Code. 
+        Return ONLY a JSON array of objects with the format: 
+        [{"index": 0, "category_code": "12345", "category_name": "Phones & Tablets"}]
+        Do not wrap the response in markdown block quotes.
+        `;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        
+        // Clean up AI response (sometimes it wraps in ```json ... ```)
+        const cleanJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+        const aiMatches = JSON.parse(cleanJson);
+
+        // 3. Merge AI results back into the products
+        const enrichedProducts = products.map((p: any, i: number) => {
+            const match = aiMatches.find((m: any) => m.index === i);
+            return {
+                ...p,
+                categoryCode: match?.category_code || "",
+                categoryName: match?.category_name || "Uncategorized"
+            };
+        });
+
+        res.json({ success: true, enrichedProducts });
+
+    } catch (error: any) {
+        console.error("AI Categorization Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
         const lines = chatText.split('\n');
         const parsedProducts: any[] = [];
