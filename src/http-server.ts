@@ -1,5 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import ExcelJS from "exceljs";
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,9 +11,12 @@ import { VendorApiClient } from "./client.ts";
 
 import multer from "multer";
 import AdmZip from "adm-zip";
+import ExcelJS from "exceljs";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // --- CORS MIDDLEWARE ---
 app.use((req, res, next) => {
@@ -46,6 +47,7 @@ app.use((req, res, next) => {
   res.status(401).json({ error: "Unauthorized" });
 });
 
+// --- JUMPIA API ROUTES ---
 app.get("/api/shops", async (req, res) => {
     try {
         const settings = await loadSettings();
@@ -172,78 +174,13 @@ app.post("/api/import/zip", upload.single("zipFile"), async (req, res) => {
             }
         });
 
-        app.post("/api/import/ai-categorize", async (req, res) => {
-    try {
-        const { products } = req.body;
-        const geminiKey = process.env.GEMINI_API_KEY;
-        
-        if (!geminiKey) {
-            return res.status(400).json({ error: "GEMINI_API_KEY is not set on the server." });
-        }
-
-        const genAI = new GoogleGenerativeAI(geminiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-        // 1. Fetch live categories from Jumia
-        const settings = await loadSettings();
-        const tokenManager = new TokenManager(settings);
-        const http = new VendorApiHttp(settings.apiBaseUrl, tokenManager);
-        const client = new VendorApiClient(http);
-        
-        // Fetch first page of categories (you can expand this later)
-        const categoryData = await client.getCategories({ size: 100 });
-        
-        // Create a simplified list for the AI: [code] Name
-        const categoryListString = categoryData.categories
-            ?.map((c: any) => `[${c.code}] ${c.name}`)
-            .join("\n");
-
-        // 2. Ask AI to match the products
-        const prompt = `
-        You are an expert Jumia e-commerce manager.
-        Here is a list of valid Jumia Category Codes and Names:
-        ${categoryListString}
-
-        Here are the raw WhatsApp products:
-        ${products.map((p: any, i: number) => `Product ${i}: ${p.rawText}`).join("\n")}
-
-        For each product, determine the best Jumia Category Code. 
-        Return ONLY a JSON array of objects with the format: 
-        [{"index": 0, "category_code": "12345", "category_name": "Phones & Tablets"}]
-        Do not wrap the response in markdown block quotes.
-        `;
-
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
-        
-        // Clean up AI response (sometimes it wraps in ```json ... ```)
-        const cleanJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-        const aiMatches = JSON.parse(cleanJson);
-
-        // 3. Merge AI results back into the products
-        const enrichedProducts = products.map((p: any, i: number) => {
-            const match = aiMatches.find((m: any) => m.index === i);
-            return {
-                ...p,
-                categoryCode: match?.category_code || "",
-                categoryName: match?.category_name || "Uncategorized"
-            };
-        });
-
-        res.json({ success: true, enrichedProducts });
-
-    } catch (error: any) {
-        console.error("AI Categorization Error:", error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
         const lines = chatText.split('\n');
         const parsedProducts: any[] = [];
 
         lines.forEach((line) => {
             if (!line.trim()) return;
 
+            // Remove timestamp before looking for price
             const lineWithoutTimestamp = line.replace(/\[.*?\]/, "");
             const priceMatch = lineWithoutTimestamp.match(/(?:ksh|kes|price)?\s*(\d{2,6})/i);
             const cleanLine = line.replace(/\[.*?\]\s*[^:]+:\s*/, "").trim();
@@ -268,6 +205,79 @@ app.post("/api/import/zip", upload.single("zipFile"), async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// --- AI CATEGORIZATION ENDPOINT ---
+app.post("/api/import/ai-categorize", async (req, res) => {
+    try {
+        const { products } = req.body;
+        const geminiKey = process.env.GEMINI_API_KEY;
+        
+        if (!geminiKey) {
+            return res.status(400).json({ error: "GEMINI_API_KEY is not set on the server." });
+        }
+
+        const genAI = new GoogleGenerativeAI(geminiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        // 1. Fetch live categories from Jumia
+        const settings = await loadSettings();
+        const tokenManager = new TokenManager(settings);
+        const http = new VendorApiHttp(settings.apiBaseUrl, tokenManager);
+        const client = new VendorApiClient(http);
+        
+        const categoryData = await client.getCategories({ size: 100 });
+        const categoryListString = categoryData.categories
+            ?.map((c: any) => `[${c.code}] ${c.name}`)
+            .join("\n");
+
+        // 2. Ask AI to match the products
+        const prompt = `
+        You are an expert Jumia e-commerce manager.
+        Here is a list of valid Jumia Category Codes and Names:
+        ${categoryListString}
+
+        Here are the raw WhatsApp products:
+        ${products.map((p: any, i: number) => `Product ${i}: ${p.rawText}`).join("\n")}
+
+        For each product, determine the best Jumia Category Code. 
+        Return ONLY a JSON array of objects with the format: 
+        [{"index": 0, "category_code": "12345", "category_name": "Phones & Tablets"}]
+        Do not wrap the response in markdown block quotes.
+        `;
+
+        const result = await model.generateContent(prompt);
+        let responseText = result.response.text();
+        
+        // 3. Robust JSON Cleaning
+        const startIndex = responseText.indexOf('[');
+        const endIndex = responseText.lastIndexOf(']');
+        
+        if (startIndex === -1 || endIndex === -1) {
+            console.error("AI Response did not contain a JSON array:", responseText);
+            throw new Error("AI failed to return a valid category list.");
+        }
+
+        const cleanJson = responseText.substring(startIndex, endIndex + 1);
+        const aiMatches = JSON.parse(cleanJson);
+
+        // 4. Merge results
+        const enrichedProducts = products.map((p: any, i: number) => {
+            const match = aiMatches.find((m: any) => m.index === i);
+            return {
+                ...p,
+                categoryCode: match?.category_code || "",
+                categoryName: match?.category_name || "Uncategorized"
+            };
+        });
+
+        res.json({ success: true, enrichedProducts });
+
+    } catch (error: any) {
+        console.error("AI Categorization Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // --- EXCEL EXPORTER ENDPOINT ---
 app.post("/api/export/excel", async (req, res) => {
     try {
@@ -276,7 +286,6 @@ app.post("/api/export/excel", async (req, res) => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Jumia Products');
 
-        // Jumia Template Headers
         worksheet.columns = [
             { header: 'SellerSku', key: 'sku', width: 20 },
             { header: 'Name', key: 'name', width: 40 },
@@ -295,14 +304,12 @@ app.post("/api/export/excel", async (req, res) => {
                 price: Number(p.price) || 0,
                 stock: Number(p.stock) || 10,
                 brand: p.brand || 'Generic',
-                category: p.category || 'Accessories'
+                category: p.categoryName || 'Uncategorized'
             });
         });
 
-        // Style the header row
         worksheet.getRow(1).font = { bold: true };
 
-        // Send file to browser
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', 'attachment; filename="Jumia_Upload_Template.xlsx"');
 
@@ -315,6 +322,7 @@ app.post("/api/export/excel", async (req, res) => {
     }
 });
 
+// --- HEALTH & MCP ROUTES ---
 app.get("/health", (_req, res) => {
   res.status(200).send("ok");
 });
