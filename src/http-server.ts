@@ -217,7 +217,7 @@ app.post("/api/import/ai-categorize", async (req, res) => {
         }
 
         const genAI = new GoogleGenerativeAI(geminiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-3.8-flash" });
         // 1. Fetch live categories from Jumia
         const settings = await loadSettings();
         const tokenManager = new TokenManager(settings);
