@@ -1,0 +1,165 @@
+1. AUTOMOBILE
+Automobile → Replacement Parts → Fuel System → Fuel Tanks & Accessories → Fuel Tanks
+Automobile → Replacement Parts → Filters → Air Filters & Accessories → Air Filters
+Automobile → Replacement Parts → Brake System → Brake Kits
+Automobile → Car Care → Exterior Care → Car Polishes & Waxes → Chrome & Metal Polishes
+Automobile → Lights & Lighting Accessories → Bulbs → Tail Lights
+Automobile → Motorcycle & Powersports → Parts → Braking
+Automobile → Oils & Fluids → Additives → Engine & Oil
+Automobile → Interior Accessories → Consoles & Organizers → Glove Box Organizers
+Automobile → Exterior Accessories → Towing Products & Winches → Hoists & Cranes → Jacks
+
+2. BABY PRODUCTS
+Baby Products → Nursery → Beds Cribs & Bedding → Bedding → Blankets & Swaddling → Wearable Blankets
+Baby Products → Nursery → Furniture → Storage & Organization → Toy Chests & Organizers → Toy Chests
+Baby Products → Apparel & Accessories → Baby Boys → Clothing → Bottoms → Pants
+Baby Products → Apparel & Accessories → Baby Girls → Clothing → Tops → Blouses
+Baby Products → Health & Baby Care → Humidifiers & Vaporizers → Humidifier Parts & Accessories → Replacement Wicks
+Baby Products → Baby & Toddler Toys → Stacking & Nesting Toys
+Baby Products → Gear → Backpacks & Carriers → Backpacks → Camping Backpacks
+
+3. BOOKS, MOVIES AND MUSIC
+Books Movies and Music → Biography & Autobiography
+Books Movies and Music → Magazines → Lifestyle & Cultures
+Books Movies and Music → DVDs → Fantasy
+Books Movies and Music → DVDs → Horror
+Books Movies and Music → DVDs → Foreign Films
+Books Movies and Music → Science & Technology → Nature
+
+4. COMPUTING
+Computing → Computers & Accessories → Computers & Tablets → Laptops → Traditional Laptops → Ultrabooks
+Computing → Computers & Accessories → Computers & Tablets → Laptops → Traditional Laptops → Notebooks
+Computing → Computer Accessories → Computer Cable Adapters → PS
+Computing → Computer Accessories → Input Devices → Digital Pens
+Computing → Computer Accessories → Input Devices → Trackballs
+Computing → Computer Accessories → Printer Accessories → Printer Feeders
+
+5. ELECTRONICS
+Electronics → Television & Video → Televisions → Smart TVs
+Electronics → Home Audio → Home Theater Systems → Speakers → Subwoofers
+Electronics → Home Audio → Home Theater Systems → Sound Bars
+Electronics → Accessories & Supplies → Audio & Video Accessories → TV Stands
+Electronics → Camera & Photo → Camera
+Electronics → Camera Accessories → Camera Accessories → Color Checker & Gray Card
+
+6. FASHION
+Fashion → Women's Fashion → Clothing → Sweaters → Cardigans
+Fashion → Women's Fashion → Jewelry → Fine → Rings
+Fashion → Men's Fashion → Clothing → Shorts → Cargo
+Fashion → Men's Fashion → Shoes → Sandals → Sling Back
+Fashion → Kid's Fashion → Boys → Clothing → Active
+Fashion → Kid's Fashion → Girls → Accessories → Cold Weather
+
+7. GAMING
+Gaming → Playstation → PlayStation 4 → Headsets
+Gaming → Playstation → PlayStation 4 → Speakers
+Gaming → PC Gaming → Accessories → Controllers → Racing Wheels
+Gaming → Xbox → Xbox 360 → Accessories → Cameras & Webcams
+Gaming → Nintendo → Wii U → Accessories → Controllers
+Gaming → Sony PSP → Accessories → Batteries & Chargers
+
+8. GARDEN & OUTDOORS
+Garden & Outdoors → Generators & Portable Power → Solar & Wind Power → Solar Panels
+Garden & Outdoors → Gardening & Lawn Care → Greenhouses & Accessories → Cold Frames
+Garden & Outdoors → Gardening & Lawn Care → Gloves & Protective Gear → Gloves
+Garden & Outdoors → Grills & Outdoor Cooking → Outdoor Cooking Tools & Accessories → Grill Carts
+Garden & Outdoors → Farm & Ranch → Livestock Supplies → Livestock Feeding & Watering Supplies
+Garden & Outdoors → Pools Hot Tubs & Supplies → Cleaning Tools & Chemicals → Chemicals & Water Testing Products → Test Strips
+Garden & Outdoors → Outdoor Décor → Backyard Birding & Wildlife → Feeders
+
+9. GROCERY
+Grocery → Household Cleaning → Bathroom Cleaners
+Grocery → Household Supplies → Papers & Rolls → Toilet Rolls → Small Packs
+Grocery → Herbs Spices & Seasonings → Single Herbs & Spices → Chinese Star Anise
+Grocery → Bakery → Cakes → Liquor Cakes
+Grocery → Canned Jarred & Packaged Foods → Fruits → Dates
+Grocery → Condiments & Salad Dressings → Salad Dressings → Oils → Vegetable
+Grocery → Candy & Chocolate → Fruits Nuts & Snacks → Nuts
+
+10. HEALTH & BEAUTY
+Health & Beauty → Beauty & Personal Care → Hair Care → Shampoo
+Health & Beauty → Beauty & Personal Care → Personal Care → Skin Care → Face
+Health & Beauty → Beauty & Personal Care → Makeup → Face → Contouring
+Health & Beauty → Beauty & Personal Care → Oral Care → Toothbrushes
+Health & Beauty → Medical Supplies & Equipment → Braces Splints & Supports → Back Neck & Shoulder Supports → Back Braces
+Health & Beauty → Medical Supplies & Equipment → Health Monitors → Health Alert & Monitoring Systems
+Health & Beauty → Vitamins & Dietary Supplements → Vitamins → Vitamin C → C-Complex
+
+11. HOME & OFFICE
+Home & Office → Home & Kitchen → Kitchen & Dining → Kitchen Utensils & Gadgets → Graters Peelers & Slicers → Graters
+Home & Office → Home & Kitchen → Kitchen & Dining → Cutlery & Knife Accessories → Cutting Boards
+Home & Office → Home & Kitchen → Bath → Bathroom Accessories → Showerheads
+Home & Office → Home & Kitchen → Home Decor → Picture Frames
+Home & Office → Home & Kitchen → Home Decor → Artificial Plants → Artificial Trees
+Home & Office → Home & Kitchen → Lighting & Ceiling Fans → Lamps & Lighting → Floor Lamps
+Home & Office → Home & Kitchen → Furniture → Living Room Furniture → Tables → Pedestal Tables
+Home & Office → Home & Kitchen → Cleaning Supplies → Gloves → Nitrile Gloves
+Home & Office → Tools & Home Improvement → Rough Plumbing → Pipes Pipe Fittings & Accessories → Pipes
+Home & Office → Tools & Home Improvement → Power & Hand Tools → Power Tools → Drills → Right-Angle Drills
+Home & Office → Office Products → Office & School Supplies → Staplers & Punches → Staple Guns
+Home & Office → Arts Crafts & Sewing → Knitting & Crochet → Yarn
+
+12. INDUSTRIAL & SCIENTIFIC
+Industrial & Scientific → Lab & Scientific Products → Lab Instruments & Equipment → Meters → Refractometers
+Industrial & Scientific → Lab & Scientific Products → Lab Instruments & Equipment → Ovens → Convection Ovens
+Industrial & Scientific → Occupational Health & Safety Products → Personal Protective Equipment → Eye Protection → Safety Goggles & Glasses → Safety Glasses
+Industrial & Scientific → Occupational Health & Safety Products → Personal Protective Equipment → Head Protection → Caps Hoods & Hairnets → Hairnets
+Industrial & Scientific → Fasteners → Threaded Inserts
+Industrial & Scientific → Tapes Adhesives & Sealants → Caulk → Silicone Caulk
+Industrial & Scientific → Professional Dental Supplies → Finishing & Polishing → Polishing Pastes
+
+13. LIVESTOCK
+Livestock → Poultry → Chickens
+Livestock → Ruminants → Goats
+Livestock → Ruminants → Cows
+Livestock → Ruminants → Rams
+Livestock → Seafood → Fresh Fish
+
+14. MISCELLANEOUS
+Miscellaneous
+
+15. MUSICAL INSTRUMENTS
+Musical Instruments → Band & Orchestra → Brass → Trumpets
+Musical Instruments → Band & Orchestra → Marching Percussion
+Musical Instruments → Band & Orchestra → Orchestral Strings
+Musical Instruments → Instrument Accessories → Orchestral Strings Accessories → Parts → Harp Parts
+Musical Instruments → Instrument Accessories → Wind & Woodwind Accessories → Cleaning & Care → Clarinets
+Musical Instruments → Microphones & Accessories → Microphones → Condenser Microphones → Vocal
+Musical Instruments → Amplifiers & Effects → Guitar Effects → Acoustic Guitar Effects
+
+16. PET SUPPLIES
+Pet Supplies → Birds → Cages & Accessories → Birdcages
+Pet Supplies → Birds → Cages & Accessories → Bird Baths
+Pet Supplies → Cats → Cat Doors Steps Nets & Pens → Cat Doors
+Pet Supplies → Reptiles & Amphibians → Food
+Pet Supplies → Reptiles & Amphibians → Habitat Décor
+Pet Supplies → Reptiles & Amphibians → Terrariums
+Pet Supplies → Small Animals → Exercise Wheels
+Pet Supplies → Horses → Boots & Wraps → Boots
+
+17. PHONES & TABLETS
+Phones & Tablets → Mobile Phones → Smartphones → Android Phones
+Phones & Tablets → Accessories → Chargers → Car Chargers
+Phones & Tablets → Accessories → Chargers & Power Adapters → Car Chargers
+Phones & Tablets → Accessories → Memory Cards → SmartMedia Cards
+Phones & Tablets → Telephones & Accessories → VoIP → Handsets
+Phones & Tablets → Accessories → Fashion Accessories → Phone Charms
+
+18. SERVICES
+Services → Professional Offers → Auto
+Services → Professional Offers → Domestic
+Services → Professional Offers → Medicals
+Services → Insurance → Education Insurance
+Services → Insurance → Health Insurance
+Services → Insurance → Life Insurance
+Services → Insurance → Motor Insurance
+
+19. SPORTING GOODS
+Sporting Goods → Sports & Fitness → Exercise & Fitness → Strength Training Equipment → Dumbbells
+Sporting Goods → Sports & Fitness → Swimming → Training Equipment → Training Paddles
+Sporting Goods → Sports & Fitness → Team Sports → Soccer → Accessories
+Sporting Goods → Sports & Fitness → Boating & Sailing → Boating → Docking & Anchoring Equipment → Anchors
+Sporting Goods → Outdoor Recreation → Camping & Hiking → Backpacks & Bags → Backpack Accessories
+Sporting Goods → Outdoor Recreation → Cycling → Bike Tools & Maintenance → Cleaners
+Sporting Goods → Sports & Fitness → Golf → Gloves
+Sporting Goods → Sports & Fitness → Leisure Sports & Game Room → Billiards & Pool → Tables & Accessories
