@@ -15,7 +15,7 @@ export default function Importer({ token }) {
   const [shops, setShops] = useState([]);
   const [selectedShop, setSelectedShop] = useState('');
 
-  // Fetch shops on load
+  // Fetch shops on load so you can select where to publish
   useEffect(() => {
     const fetchShops = async () => {
       try {
@@ -88,6 +88,7 @@ export default function Importer({ token }) {
       if (!response.ok) throw new Error('AI categorization failed. Check server logs.');
       
       const data = await response.json();
+      // Update results with enriched products (prices and categories)
       setResults({ ...results, extractedProducts: data.enrichedProducts });
     } catch (err) {
       setError(err.message);
@@ -236,8 +237,9 @@ export default function Importer({ token }) {
                   <tr>
                     <th className="px-6 py-4">Image</th>
                     <th className="px-6 py-4">Raw Text</th>
-                    <th className="px-6 py-4">Price</th>
-                    <th className="px-6 py-4">AI Jumia Category</th>
+                    <th className="px-6 py-4">Wholesale Cost</th>
+                    <th className="px-6 py-4">Jumia Selling Price</th>
+                    <th className="px-6 py-4">AI Category</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -251,14 +253,16 @@ export default function Importer({ token }) {
                         )}
                       </td>
                       <td className="px-6 py-4 max-w-md">{prod.rawText}</td>
-                      <td className="px-6 py-4 font-mono text-brand font-bold">
-                        {prod.price ? `KES ${prod.price}` : 'Not found'}
+                      <td className="px-6 py-4 font-mono text-gray-400">
+                        {prod.costPrice ? `KES ${prod.costPrice}` : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 font-mono text-green-400 font-bold text-lg">
+                        {prod.sellingPrice ? `KES ${prod.sellingPrice}` : 'N/A'}
                       </td>
                       <td className="px-6 py-4">
                         {prod.categoryName ? (
                           <div>
                             <p className="font-bold text-purple-400">{prod.categoryName}</p>
-                            <p className="text-xs text-gray-500 font-mono mt-1">Code: {prod.categoryCode}</p>
                           </div>
                         ) : (
                           <span className="text-gray-500 italic">Not categorized</span>
