@@ -129,13 +129,19 @@ app.post("/api/import/ai-categorize", async (req, res) => {
         if (!geminiKey) return res.status(400).json({ error: "GEMINI_API_KEY not set." });
 
         const genAI = new GoogleGenerativeAI(geminiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-3.8-flash" });
-
+const model = genAI.getGenerativeModel({ 
+    model: "gemini-3.8-flash",
+    generationConfig: {
+        thinkingConfig: {
+            thinkingLevel: "LOW" // Tells the model to think less and answer faster
+        }
+    }
+});
         const settings = await loadSettings();
         const client = new VendorApiClient(new VendorApiHttp(settings.apiBaseUrl, new TokenManager(settings)));
         
         // Fetch deep categories
-        const categoryData = await client.getCategories({ size: 500 });
+        const categoryData = await client.getCategories({ size: 100 });
         const categoryListString = categoryData.categories?.map((c: any) => `[${c.code}] ${c.completePath || c.name}`).join("\n");
 
         const prompt = `
