@@ -19,7 +19,6 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// --- CORS MIDDLEWARE ---
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "Authorization, Content-Type");
@@ -36,7 +35,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "..", "public")));
 
-// --- AUTH MIDDLEWARE ---
 app.use((req, res, next) => {
   if (req.path === "/health" || req.path === "/" || req.path.startsWith("/index.html") || req.path.startsWith("/api/import")) return next();
   if (!MCP_API_TOKEN) return next();
@@ -45,7 +43,6 @@ app.use((req, res, next) => {
   res.status(401).json({ error: "Unauthorized" });
 });
 
-// --- JUMPIA API ROUTES ---
 app.get("/api/shops", async (req, res) => {
     try {
         const settings = await loadSettings();
@@ -54,13 +51,11 @@ app.get("/api/shops", async (req, res) => {
     } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
-// --- ZIP IMPORTER ---
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.post("/api/import/zip", upload.single("zipFile"), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No ZIP file uploaded." });
-
         const zip = new AdmZip(req.file.buffer);
         let chatText = "";
         const images: string[] = []; 
@@ -93,14 +88,13 @@ app.post("/api/import/zip", upload.single("zipFile"), async (req, res) => {
     } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
-// --- AI CATEGORIZATION & DATA GENERATION ---
 app.post("/api/import/ai-categorize", async (req, res) => {
     try {
         const { products } = req.body;
         const geminiKey = process.env.GEMINI_API_KEY;
-        if (!geminiKey) return res.status(400).json({ error: "GEMINI_API_KEY not set." });
+        if (!geminiKey) return res.status(400).json({ error: "GEMINI_API_KEY is not set in Render environment variables." });
 
-        // 1. Read categories (Fallback to basic if file missing)
+        // Read categories or use fallback
         const categoryFilePath = path.join(__dirname, "..", "data", "categories.txt");
         let categoryListString = fs.existsSync(categoryFilePath) 
             ? fs.readFileSync(categoryFilePath, "utf8") 
@@ -108,9 +102,9 @@ app.post("/api/import/ai-categorize", async (req, res) => {
 
         const genAI = new GoogleGenerativeAI(geminiKey);
         
-        // Fastest model configuration for quick JSON output
+        // Using 3.8-flash as it is the only model that works with the new API key tier
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash",
+            model: "gemini-3.8-flash",
             generationConfig: {
                 responseMimeType: "application/json",
                 temperature: 0.1,
@@ -138,13 +132,13 @@ app.post("/api/import/ai-categorize", async (req, res) => {
 
         const result = await model.generateContent(prompt);
         let text = result.response.text();
+        
         const start = text.indexOf('[');
         const end = text.lastIndexOf(']');
-        if (start === -1 || end === -1) throw new Error("AI returned invalid format.");
+        if (start === -1 || end === -1) throw new Error(`AI returned invalid format: ${text.substring(0, 50)}...`);
         
         const aiMatches = JSON.parse(text.substring(start, end + 1));
 
-        // 2. Apply YOUR Custom Pricing Rules
         const enrichedProducts = products.map((p: any, i: number) => {
             const match = aiMatches.find((m: any) => m.index === i);
             const costPrice = Number(p.price) || 0; 
@@ -171,11 +165,11 @@ app.post("/api/import/ai-categorize", async (req, res) => {
         res.json({ success: true, enrichedProducts });
     } catch (error: any) { 
         console.error("AI Error:", error);
+        // Send the exact error back to the frontend so you can see it!
         res.status(500).json({ error: error.message }); 
     }
 });
 
-// --- EXCEL EXPORTER (73 HEADERS) ---
 app.post("/api/export/excel", async (req, res) => {
     try {
         const { products } = req.body;
@@ -203,26 +197,21 @@ app.post("/api/export/excel", async (req, res) => {
 
         products.forEach((p: any) => {
             const rowData: any = {};
-            headers.forEach(h => rowData[h] = ""); // Initialize all columns to empty
+            headers.forEach(h => rowData[h] = "");
 
-            // Fill in the AI-generated and calculated data
             rowData['Name'] = p.name;
             rowData['Description'] = p.description;
             rowData['SellerSKU'] = p.sku;
             rowData['ParentSKU'] = p.sku; 
-            rowData['Brand'] = p.brand || 'Generic';
+            rowData['Brand'] = 'Generic';
             rowData['PrimaryCategory'] = p.categoryName;
             rowData['Price_KES'] = p.sellingPrice;
-            rowData['Stock'] = 10; // Default stock
-            
-            if (p.image) {
-                rowData['MainImage'] = p.image; 
-            }
+            rowData['Stock'] = 10; 
+            if (p.image) rowData['MainImage'] = p.image; 
 
             worksheet.addRow(headers.map(h => rowData[h]));
         });
 
-        // Styling
         const headerRow = worksheet.getRow(1);
         headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
@@ -235,13 +224,11 @@ app.post("/api/export/excel", async (req, res) => {
     } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
-// --- HEALTH & MCP ---
 app.get("/health", (_req, res) => res.status(200).send("ok"));
 
 function getTransport() {
   return new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableDnsRebindingProtection: true, allowedHosts: [RENDER_HOST, "localhost", "127.0.0.1"] });
 }
-
 app.post("/mcp", async (req, res) => { const t = getTransport(); await server.connect(t); await t.handleRequest(req, res, req.body); });
 app.get("/mcp", async (req, res) => { const t = getTransport(); await server.connect(t); await t.handleRequest(req, res); });
 app.delete("/mcp", async (req, res) => { const t = getTransport(); await server.connect(t); await t.handleRequest(req, res); });
