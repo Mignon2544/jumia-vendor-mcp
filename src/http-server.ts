@@ -54,36 +54,6 @@ app.get("/api/shops", async (req, res) => {
     } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
-app.get("/api/products", async (req, res) => {
-    try {
-        const settings = await loadSettings();
-        const client = new VendorApiClient(new VendorApiHttp(settings.apiBaseUrl, new TokenManager(settings)));
-        const options: any = { size: 50, token: req.query.token as string };
-        if (req.query.search && req.query.type === "sku") options.sellerSku = req.query.search;
-        res.json(await client.getProducts(options));
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
-app.post("/api/products/update-price", async (req, res) => {
-    try {
-        const { sellerSku, id, category, newPrice, currency } = req.body;
-        const settings = await loadSettings();
-        const client = new VendorApiClient(new VendorApiHttp(settings.apiBaseUrl, new TokenManager(settings)));
-        const payload = [{ sellerSku, id, category, price: { currency: currency || "KES", value: Number(newPrice) } }];
-        res.json({ success: true, result: await client.updatePrice(payload) });
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
-app.post("/api/products/update-status", async (req, res) => {
-    try {
-        const { sellerSku, id, businessClientCode, newStatus } = req.body;
-        const settings = await loadSettings();
-        const client = new VendorApiClient(new VendorApiHttp(settings.apiBaseUrl, new TokenManager(settings)));
-        const payload = [{ id, sellerSku, businessClients: [{ businessClientCode, status: newStatus }] }];
-        res.json({ success: true, result: await client.updateStatus(payload) });
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-});
-
 // --- ZIP IMPORTER ---
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -119,29 +89,28 @@ app.post("/api/import/zip", upload.single("zipFile"), async (req, res) => {
             }
         });
 
-        res.json({ success: true, extractedProducts: parsedProducts, totalImagesFound: images.length });
+        res.json({ success: true, extractedProducts: parsedProducts });
     } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
 
-// --- AI CATEGORIZATION & PRICING ---
+// --- AI CATEGORIZATION & DATA GENERATION ---
 app.post("/api/import/ai-categorize", async (req, res) => {
     try {
         const { products } = req.body;
         const geminiKey = process.env.GEMINI_API_KEY;
         if (!geminiKey) return res.status(400).json({ error: "GEMINI_API_KEY not set." });
 
-        // 1. Read the local category file (Make sure this exists in data/categories.txt)
+        // 1. Read categories (Fallback to basic if file missing)
         const categoryFilePath = path.join(__dirname, "..", "data", "categories.txt");
-        let categoryListString = "";
-        if (fs.existsSync(categoryFilePath)) {
-            categoryListString = fs.readFileSync(categoryFilePath, "utf8");
-        } else {
-            categoryListString = "No categories found. Please check data/categories.txt";
-        }
+        let categoryListString = fs.existsSync(categoryFilePath) 
+            ? fs.readFileSync(categoryFilePath, "utf8") 
+            : "Phones & Tablets → Accessories → Phone Cases\nHome & Office → Home & Kitchen";
 
         const genAI = new GoogleGenerativeAI(geminiKey);
+        
+        // Fastest model configuration for quick JSON output
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-3.8-flash",
+            model: "gemini-1.5-flash",
             generationConfig: {
                 responseMimeType: "application/json",
                 temperature: 0.1,
@@ -153,12 +122,17 @@ app.post("/api/import/ai-categorize", async (req, res) => {
         Here is the list of valid Jumia category paths:
         ${categoryListString}
 
-        Products to categorize:
+        Products to process:
         ${products.map((p: any, i: number) => `Product ${i}: ${p.rawText} | Wholesale Price: ${p.price}`).join("\n")}
 
-        For each product, find the EXACT category path from the list above that matches it best.
-        Return ONLY a JSON array of objects with the format: 
-        [{"index": 0, "category_name": "Home & Office → Tools & Home Improvement → Power Tools"}]
+        For each product, do the following:
+        1. Generate a clean, professional Product Name.
+        2. Generate a short Description.
+        3. Generate a unique SKU (e.g., WIZO-XXXX).
+        4. Determine the closest exact category path from the list above.
+        
+        Return ONLY a JSON array of objects with this exact format:
+        [{"index": 0, "name": "Clean Name", "description": "Clean Desc", "sku": "WIZO-1234", "category_name": "Path → To → Category"}]
         Do not return markdown. Just the JSON array.
         `;
 
@@ -176,23 +150,18 @@ app.post("/api/import/ai-categorize", async (req, res) => {
             const costPrice = Number(p.price) || 0; 
             
             let sellingPrice = costPrice;
-
-            if (costPrice >= 50 && costPrice <= 300) {
-                sellingPrice = 999;
-            } else if (costPrice >= 400 && costPrice <= 1900) {
-                sellingPrice = costPrice * 3;
-            } else if (costPrice >= 2000 && costPrice <= 3900) {
-                sellingPrice = costPrice * 2;
-            } else if (costPrice >= 4000 && costPrice <= 6900) {
-                sellingPrice = costPrice * 2;
-            } else if (costPrice >= 7000 && costPrice <= 20000) {
-                sellingPrice = (costPrice * 2) - 2000;
-            } else if (costPrice >= 20000 && costPrice <= 40000) {
-                sellingPrice = costPrice * 1.5;
-            }
+            if (costPrice >= 50 && costPrice <= 300) sellingPrice = 999;
+            else if (costPrice >= 400 && costPrice <= 1900) sellingPrice = costPrice * 3;
+            else if (costPrice >= 2000 && costPrice <= 3900) sellingPrice = costPrice * 2;
+            else if (costPrice >= 4000 && costPrice <= 6900) sellingPrice = costPrice * 2;
+            else if (costPrice >= 7000 && costPrice <= 20000) sellingPrice = (costPrice * 2) - 2000;
+            else if (costPrice >= 20000 && costPrice <= 40000) sellingPrice = costPrice * 1.5;
 
             return { 
                 ...p, 
+                name: match?.name || p.rawText,
+                description: match?.description || p.rawText,
+                sku: match?.sku || `WIZO-${Math.floor(Math.random() * 10000)}`,
                 costPrice: costPrice,
                 sellingPrice: Math.round(sellingPrice),
                 categoryName: match?.category_name || "Uncategorized" 
@@ -203,39 +172,6 @@ app.post("/api/import/ai-categorize", async (req, res) => {
     } catch (error: any) { 
         console.error("AI Error:", error);
         res.status(500).json({ error: error.message }); 
-    }
-});
-
-// --- PUBLISH TO JUMIA ---
-app.post("/api/import/publish", async (req, res) => {
-    try {
-        const { products, shopId } = req.body;
-        if (!shopId) return res.status(400).json({ error: "Shop ID is required." });
-
-        const settings = await loadSettings();
-        const client = new VendorApiClient(new VendorApiHttp(settings.apiBaseUrl, new TokenManager(settings)));
-
-        const jumiaProducts = products.map((p: any) => {
-            const sku = p.sku || `SKU-${Math.floor(Math.random() * 10000)}`;
-            return {
-                name: { value: p.name || p.rawText },
-                description: { value: p.description || p.rawText },
-                sellerSku: sku,
-                parentSku: sku, 
-                brand: { code: "1234", name: "Generic" }, 
-                category: { code: p.categoryCode || "1234", name: p.categoryName || "Uncategorized" },
-                price: { currency: "KES", value: p.sellingPrice || 0 },
-                stock: Number(p.stock) || 10,
-                images: p.image ? [{ url: p.image, primary: true }] : [], 
-                attributes: []
-            };
-        });
-
-        const result = await client.createProducts(shopId, jumiaProducts);
-        res.json({ success: true, result });
-    } catch (error: any) {
-        console.error("Publish Error:", error);
-        res.status(500).json({ error: error.message });
     }
 });
 
@@ -266,26 +202,27 @@ app.post("/api/export/excel", async (req, res) => {
         worksheet.addRow(headers);
 
         products.forEach((p: any) => {
-            const sku = p.sku || `SKU-${Math.floor(Math.random() * 10000)}`;
             const rowData: any = {};
-            headers.forEach(h => rowData[h] = "");
+            headers.forEach(h => rowData[h] = ""); // Initialize all columns to empty
 
-            rowData['Name'] = p.name || p.rawText;
-            rowData['Description'] = p.description || p.rawText;
-            rowData['SellerSKU'] = sku;
-            rowData['ParentSKU'] = sku; 
+            // Fill in the AI-generated and calculated data
+            rowData['Name'] = p.name;
+            rowData['Description'] = p.description;
+            rowData['SellerSKU'] = p.sku;
+            rowData['ParentSKU'] = p.sku; 
             rowData['Brand'] = p.brand || 'Generic';
-            rowData['PrimaryCategory'] = p.categoryName || 'Uncategorized';
+            rowData['PrimaryCategory'] = p.categoryName;
+            rowData['Price_KES'] = p.sellingPrice;
+            rowData['Stock'] = 10; // Default stock
             
-            // Use the calculated Selling Price
-            rowData['Price_KES'] = p.sellingPrice || Number(p.price) || 0;
-            
-            rowData['Stock'] = Number(p.stock) || 10;
-            if (p.image) rowData['MainImage'] = p.image; 
+            if (p.image) {
+                rowData['MainImage'] = p.image; 
+            }
 
             worksheet.addRow(headers.map(h => rowData[h]));
         });
 
+        // Styling
         const headerRow = worksheet.getRow(1);
         headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };

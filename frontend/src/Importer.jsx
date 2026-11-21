@@ -1,40 +1,15 @@
 import { useState, useEffect } from 'react';
-import { UploadCloud, FileArchive, CheckCircle, Loader2, Download, Sparkles, Send } from 'lucide-react';
+import { UploadCloud, FileArchive, CheckCircle, Loader2, Download, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Importer({ token }) {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
-  const [publishing, setPublishing] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
   
   const [results, setResults] = useState(null);
   const [error, setError] = useState('');
-  
-  // Shop Selection State
-  const [shops, setShops] = useState([]);
-  const [selectedShop, setSelectedShop] = useState('');
-
-  // Fetch shops on load so you can select where to publish
-  useEffect(() => {
-    const fetchShops = async () => {
-      try {
-        const res = await fetch('https://jumia-vendor-mcp.onrender.com/api/shops', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setShops(data);
-          if (data.length > 0) {
-            setSelectedShop(data[0].id || data[0].shopId);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load shops", err);
-      }
-    };
-    fetchShops();
-  }, [token]);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -75,21 +50,35 @@ export default function Importer({ token }) {
   const handleAICategorize = async () => {
     setCategorizing(true);
     setError('');
+    
+    const allProducts = [...results.extractedProducts];
+    const batchSize = 3; // Process 3 products at a time to prevent timeouts
+    let processedProducts = [];
+    
+    setProgress({ current: 0, total: allProducts.length });
+
     try {
-      const response = await fetch('https://jumia-vendor-mcp.onrender.com/api/import/ai-categorize', {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ products: results.extractedProducts })
-      });
-      
-      if (!response.ok) throw new Error('AI categorization failed. Check server logs.');
-      
-      const data = await response.json();
-      // Update results with enriched products (prices and categories)
-      setResults({ ...results, extractedProducts: data.enrichedProducts });
+      for (let i = 0; i < allProducts.length; i += batchSize) {
+        const batch = allProducts.slice(i, i + batchSize);
+        
+        const response = await fetch('https://jumia-vendor-mcp.onrender.com/api/import/ai-categorize', {
+          method: 'POST',
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ products: batch })
+        });
+        
+        if (!response.ok) throw new Error('AI categorization failed.');
+        
+        const data = await response.json();
+        processedProducts = [...processedProducts, ...data.enrichedProducts];
+        
+        // Update progress and show results immediately
+        setProgress({ current: Math.min(i + batchSize, allProducts.length), total: allProducts.length });
+        setResults(prev => ({ ...prev, extractedProducts: [...processedProducts, ...allProducts.slice(i + batchSize)] }));
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -123,37 +112,6 @@ export default function Importer({ token }) {
     }
   };
 
-  const publishToJumia = async () => {
-    if (!selectedShop) return alert("Please select a shop first.");
-    setPublishing(true);
-    setError('');
-    
-    try {
-      const response = await fetch('https://jumia-vendor-mcp.onrender.com/api/import/publish', {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          products: results.extractedProducts,
-          shopId: selectedShop
-        })
-      });
-      
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Failed to publish to Jumia.');
-      }
-      
-      alert("Products pushed to Jumia successfully! Check your Jumia dashboard in a few minutes.");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setPublishing(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <header className="mb-8">
@@ -173,7 +131,7 @@ export default function Importer({ token }) {
           </motion.div>
           
           <h3 className="text-xl font-bold text-white mb-2">Upload ZIP File</h3>
-          <p className="text-gray-400 mb-8 max-w-md">Select the ZIP file containing your WhatsApp chat export (_chat.txt) and product images.</p>
+          <p className="text-gray-400 mb-8 max-w-md">Select the ZIP file containing your WhatsApp chat export and product images.</p>
           
           <input type="file" accept=".zip" id="zipUpload" className="hidden" onChange={handleFileChange} />
           
@@ -203,29 +161,13 @@ export default function Importer({ token }) {
             </div>
             
             <div className="flex flex-wrap items-center gap-3">
-              {/* Shop Selector */}
-              <select 
-                value={selectedShop} 
-                onChange={(e) => setSelectedShop(e.target.value)}
-                className="bg-panelBg border border-white/10 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-brand"
-              >
-                {shops.map(s => (
-                  <option key={s.id || s.shopId} value={s.id || s.shopId}>{s.name || s.shopName}</option>
-                ))}
-              </select>
-
               <button onClick={handleAICategorize} disabled={categorizing} className="flex items-center gap-2 bg-purple-500 hover:bg-purple-400 text-white px-5 py-3 rounded-xl font-bold transition-all shadow-lg disabled:opacity-50">
                 {categorizing ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />} 
-                {categorizing ? 'AI Thinking...' : 'AI Categorize'}
+                {categorizing ? `Processing ${progress.current}/${progress.total}...` : 'AI Auto-Process'}
               </button>
 
               <button onClick={downloadExcel} className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-white px-5 py-3 rounded-xl font-bold transition-all shadow-lg">
-                <Download size={20} /> Export
-              </button>
-
-              <button onClick={publishToJumia} disabled={publishing} className="flex items-center gap-2 bg-blue-500 hover:bg-blue-400 text-white px-5 py-3 rounded-xl font-bold transition-all shadow-lg disabled:opacity-50">
-                {publishing ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />} 
-                {publishing ? 'Publishing...' : 'Push to Jumia'}
+                <Download size={20} /> Export Excel
               </button>
             </div>
           </div>
@@ -236,10 +178,10 @@ export default function Importer({ token }) {
                 <thead className="bg-white/5 text-gray-400 border-b border-white/10">
                   <tr>
                     <th className="px-6 py-4">Image</th>
-                    <th className="px-6 py-4">Raw Text</th>
-                    <th className="px-6 py-4">Wholesale Cost</th>
-                    <th className="px-6 py-4">Jumia Selling Price</th>
-                    <th className="px-6 py-4">AI Category</th>
+                    <th className="px-6 py-4">Generated Name / SKU</th>
+                    <th className="px-6 py-4">Wholesale</th>
+                    <th className="px-6 py-4">Jumia Price</th>
+                    <th className="px-6 py-4">Category</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -252,20 +194,21 @@ export default function Importer({ token }) {
                           <div className="w-16 h-16 bg-white/5 rounded-lg flex items-center justify-center text-xs text-gray-500 border border-white/10">No Img</div>
                         )}
                       </td>
-                      <td className="px-6 py-4 max-w-md">{prod.rawText}</td>
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-white mb-1">{prod.name || prod.rawText}</p>
+                        <p className="text-xs font-mono text-gray-500">SKU: {prod.sku || 'Pending...'}</p>
+                      </td>
                       <td className="px-6 py-4 font-mono text-gray-400">
                         {prod.costPrice ? `KES ${prod.costPrice}` : 'N/A'}
                       </td>
                       <td className="px-6 py-4 font-mono text-green-400 font-bold text-lg">
-                        {prod.sellingPrice ? `KES ${prod.sellingPrice}` : 'N/A'}
+                        {prod.sellingPrice ? `KES ${prod.sellingPrice}` : 'Pending...'}
                       </td>
                       <td className="px-6 py-4">
                         {prod.categoryName ? (
-                          <div>
-                            <p className="font-bold text-purple-400">{prod.categoryName}</p>
-                          </div>
+                          <p className="font-bold text-purple-400">{prod.categoryName}</p>
                         ) : (
-                          <span className="text-gray-500 italic">Not categorized</span>
+                          <span className="text-gray-500 italic">Pending...</span>
                         )}
                       </td>
                     </tr>
